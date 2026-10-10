@@ -1,4 +1,4 @@
-# 🪔 Durga Puja Hopping Optimizer
+# 🪔 Durga Puja Pandal Hopping Optimizer
 
 An intelligent route optimization and scheduling application tailored for Kolkata & West Bengal Durga Puja pandal hopping.
 

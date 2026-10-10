@@ -18,12 +18,12 @@ from geocoder import geocode_location
 from optimizer import PujaHopperOptimizer, UserPreference, MealSlot, format_hour_to_time_str
 
 st.set_page_config(
-    page_title="Route - Kolkata Durga Puja Hopping Scheduler",
-    page_icon="🙏",
+    page_title="Durga Puja Pandal Hopping Optimizer",
+    page_icon="🪔",
     layout="wide"
 )
 
-st.title("🪔 Durga Puja Hopping Optimizer")
+st.title("🪔 Durga Puja Pandal Hopping Optimizer")
 st.markdown(
     """
     Plan a complete **door-to-door** Durga Puja hopping journey across Kolkata.
