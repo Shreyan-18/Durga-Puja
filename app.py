@@ -303,6 +303,11 @@ if is_custom_mode:
 
     theme_weight = 1.0
     trad_weight = 1.0
+    include_on_route = st.sidebar.checkbox(
+        "✨ Include Top-Rated Pandals on Direct Route",
+        value=True,
+        help="If a top-rated pandal (rating ≥ 8.9) lies directly along your walking corridor between two stops (detour ≤ 750m) and time permits, it will be automatically added as an en-route discovery stop!"
+    )
 else:
     selected_zones = st.sidebar.multiselect(
         "Target Pandal Zones",
@@ -312,6 +317,7 @@ else:
     col_p1, col_p2 = st.sidebar.columns(2)
     theme_weight = col_p1.slider("Theme Art", 0.5, 2.0, 1.2, 0.1)
     trad_weight = col_p2.slider("Heritage", 0.5, 2.0, 1.0, 0.1)
+    include_on_route = True
 
 patience = st.sidebar.slider("Queue Patience", 0.5, 1.5, 1.0, 0.1)
 has_vip = st.sidebar.checkbox("VIP Passes", value=False)
@@ -359,7 +365,8 @@ prefs = UserPreference(
     max_budget_inr=max_budget_val,
     max_meal_cost=max_meal_spend_val,
     planning_mode="custom_selection" if is_custom_mode else "auto",
-    custom_pandal_ids=selected_pandal_ids if is_custom_mode else []
+    custom_pandal_ids=selected_pandal_ids if is_custom_mode else [],
+    include_on_route_pandals=include_on_route
 )
 
 optimizer = PujaHopperOptimizer(pandal_pool=all_available_pandals)
@@ -372,9 +379,11 @@ if is_custom_mode:
     if len(selected_pandal_ids) == 0:
         st.warning("⚠️ **No Pandals Selected:** Please select at least one must-visit pandal in the sidebar to generate your custom route.")
     elif result.total_pandals_visited >= len(selected_pandal_ids):
-        st.success(f"🎯 **Custom Route Successfully Optimized!** All **{result.total_pandals_visited}** of your selected must-visit pandals have been sequenced in the globally optimal order to minimize travel distance, avoid traffic choke points, and beat crowd rush queues.")
+        bonus_msg = f" plus **{len(result.bonus_pandals_added)} on-route discovery stop(s)** ({', '.join(result.bonus_pandals_added)}) added along your corridor" if result.bonus_pandals_added else ""
+        st.success(f"🎯 **Custom Route Successfully Optimized!** All **{len(selected_pandal_ids)}** of your selected must-visit pandals{bonus_msg} have been sequenced in the globally optimal order to minimize travel distance, avoid traffic choke points, and beat crowd rush queues.")
     else:
-        st.warning(f"⏱️ **Time Budget Notice:** Successfully scheduled **{result.total_pandals_visited}** of your **{len(selected_pandal_ids)}** chosen pandals. Due to queue times and travel, the remaining ({', '.join(result.unvisited_custom_pandals)}) could not fit before your target curfew ({result.end_time_str}). Consider extending your End Time to visit them all!")
+        bonus_msg = f" (including {len(result.bonus_pandals_added)} on-route discovery stop)" if result.bonus_pandals_added else ""
+        st.warning(f"⏱️ **Time Budget Notice:** Successfully scheduled **{result.total_pandals_visited}** pandals{bonus_msg}. Due to queue times and travel, {len(result.unvisited_custom_pandals)} of your chosen pandals ({', '.join(result.unvisited_custom_pandals)}) could not fit before your target curfew ({result.end_time_str}). Consider extending your End Time to visit them all!")
 
 # ----------------- GATEWAY GUIDANCE BANNER -----------------
 st.subheader("🚉 Recommended Transit & Metro Gateways")
@@ -468,6 +477,15 @@ with tab_map:
                     "size": 240,
                     "type": "Dining"
                 })
+            elif s.is_bonus_stop:
+                point_items.append({
+                    "name": f"✨ Stop {s.stop_number} [On-Route Discovery]: {s.name} ({s.zone})",
+                    "lat": s.lat,
+                    "lon": s.lon,
+                    "color": [255, 215, 0, 255], # Bright Gold/Amber
+                    "size": 250,
+                    "type": "Discovery Pandal"
+                })
             else:
                 point_items.append({
                     "name": f"🚩 Stop {s.stop_number}: {s.name} ({s.zone})",
@@ -536,7 +554,7 @@ with tab_map:
         tooltip={"text": "{name}"}
     )
     st.pydeck_chart(deck)
-    st.markdown("🟢 **Green**: Home/Origin | 🔴 **Red**: Pandals | 🟠 **Orange**: Food / Restaurant | 🔵 **Blue**: Key Metro & Train Stations")
+    st.markdown("🟢 **Green**: Home/Origin | 🔴 **Red**: Selected Pandals | ✨ **Gold**: On-Route Discovery Pandals | 🟠 **Orange**: Food / Dining | 🔵 **Blue**: Key Metro & Stations")
 
 with tab_sched:
     st.subheader(f"Minute-by-Minute Timeline ({result.start_time_str} → {result.actual_return_time_str})")

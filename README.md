@@ -37,6 +37,7 @@ puja_hopper/
 - **🎯 Dual Planning Modes (Auto-Discover vs. Custom Bucket List)**:
   - **✨ Auto-Discover & Recommend**: Intelligently recommends the highest-rated pandals across selected zones based on art themes, tradition, and crowd tolerance.
   - **🎯 Custom Selection & Route Optimization**: Handpick your exact must-visit pandals (or add custom neighborhood pandals with live geocoding). The algorithm computes the globally optimal traveling sequence, avoiding traffic traps and minimizing queue times.
+  - **✨ Intelligent On-Route Pandal Discovery**: If an unselected top-rated pandal (rating $\ge 8.9$) lies directly along your walking corridor between two chosen stops (detour $\le 0.75\text{ km}$) and time permits before your return curfew, the optimizer automatically schedules it as a bonus discovery stop without causing itinerary delays.
 
 - **🏛️ 164+ Bengal Pandals Across 6 Zones**:
   - **South Kolkata (47)**: Ekdalia, Singhi Park, Tridhara, Ballygunge Cultural, Maddox Square, Chetla Agrani, Suruchi Sangha, Mudiali, Naktala Udayan, Jodhpur Park, Baruipur Roy Chowdhury Bari, etc.

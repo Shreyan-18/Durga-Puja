@@ -46,6 +46,7 @@ class UserPreference:
     max_meal_cost: Optional[int] = None
     planning_mode: str = "auto"
     custom_pandal_ids: List[str] = field(default_factory=list)
+    include_on_route_pandals: bool = True
 
     @property
     def total_budget_minutes(self) -> float:
@@ -73,6 +74,7 @@ class ItineraryStop:
     transition: Optional[TransitionInfo] = None
     is_home_stop: bool = False
     is_food_stop: bool = False
+    is_bonus_stop: bool = False
     food_cost_min: int = 0
     food_cost_max: int = 0
     lat: float = 0.0
@@ -118,6 +120,7 @@ class ItineraryResult:
     planning_mode: str = "auto"
     selected_pandal_count: int = 0
     unvisited_custom_pandals: List[str] = field(default_factory=list)
+    bonus_pandals_added: List[str] = field(default_factory=list)
 
 def format_hour_to_time_str(hour_float: float) -> str:
     normalized_hour = hour_float % 24.0
@@ -198,6 +201,44 @@ class PujaHopperOptimizer:
             return_instructions=return_ins
         )
 
+    def find_on_route_pandal(
+        self,
+        current_lat: float,
+        current_lon: float,
+        target_lat: float,
+        target_lon: float,
+        visited_ids: Set[str],
+        max_detour_km: float = 0.75,
+        min_rating: float = 8.9
+    ) -> Optional[Tuple[Pandal, float]]:
+        """
+        Finds a top-rated unvisited pandal directly along the corridor between
+        current location and target pandal with minimal detour.
+        """
+        direct_dist = haversine_km(current_lat, current_lon, target_lat, target_lon)
+        best_candidate: Optional[Pandal] = None
+        min_detour = 999.0
+
+        for candidate in self.pandal_pool:
+            if candidate.id in visited_ids:
+                continue
+            if candidate.base_rating < min_rating:
+                continue
+
+            dist1 = haversine_km(current_lat, current_lon, candidate.lat, candidate.lon)
+            dist2 = haversine_km(candidate.lat, candidate.lon, target_lat, target_lon)
+            detour = (dist1 + dist2) - direct_dist
+
+            # Must lie in forward progression corridor with minimal detour
+            if detour <= max_detour_km and dist1 < (direct_dist + 0.3) and dist2 < (direct_dist + 0.3):
+                if detour < min_detour:
+                    min_detour = detour
+                    best_candidate = candidate
+
+        if best_candidate:
+            return best_candidate, min_detour
+        return None
+
     def simulate_itinerary(self, route: List[Pandal], prefs: UserPreference) -> Tuple[List[ItineraryStop], Dict[str, Any]]:
         home_lat = prefs.home_lat
         home_lon = prefs.home_lon
@@ -244,6 +285,8 @@ class PujaHopperOptimizer:
         ))
 
         visited_pandals: List[Pandal] = []
+        bonus_pandal_names: List[str] = []
+        visited_ids: Set[str] = {p.id for p in route}
 
         for pandal in route:
             # Check if any scheduled meal is due BEFORE visiting this pandal
@@ -351,6 +394,86 @@ class PujaHopperOptimizer:
                             current_hour = m_dep
                             remaining_meals.pop(0)
 
+            # Check for high-rated on-route bonus pandal opportunity between current location and pandal
+            if prefs.include_on_route_pandals and len(visited_pandals) > 0:
+                candidate_info = self.find_on_route_pandal(
+                    current_lat, current_lon, pandal.lat, pandal.lon,
+                    visited_ids=visited_ids,
+                    max_detour_km=0.75,
+                    min_rating=8.9
+                )
+                if candidate_info:
+                    bonus_pandal, detour_km = candidate_info
+                    b_trans = get_transition_details(
+                        current_lat, current_lon, bonus_pandal.lat, bonus_pandal.lon,
+                        current_hour, current_location_name, bonus_pandal.name
+                    )
+                    b_arr = current_hour + (b_trans.travel_time_mins / 60.0)
+                    b_queue = get_queue_wait_time(
+                        bonus_pandal, b_arr % 24.0, tithi=prefs.tithi, has_vip_pass=prefs.has_vip_pass
+                    )
+                    b_visit = bonus_pandal.avg_visit_mins
+                    b_dep = b_arr + ((b_queue + b_visit) / 60.0)
+
+                    # Next leg from bonus_pandal to the planned pandal
+                    leg2_trans = get_transition_details(
+                        bonus_pandal.lat, bonus_pandal.lon, pandal.lat, pandal.lon,
+                        b_dep, bonus_pandal.name, pandal.name
+                    )
+                    leg2_arr = b_dep + (leg2_trans.travel_time_mins / 60.0)
+                    leg2_queue = get_queue_wait_time(
+                        pandal, leg2_arr % 24.0, tithi=prefs.tithi, has_vip_pass=prefs.has_vip_pass
+                    )
+                    leg2_dep = leg2_arr + ((leg2_queue + pandal.avg_visit_mins) / 60.0)
+                    leg2_ret = get_transition_details(
+                        pandal.lat, pandal.lon, home_lat, home_lon,
+                        leg2_dep, pandal.name, prefs.home_name
+                    )
+
+                    time_with_bonus = (
+                        elapsed_mins +
+                        b_trans.travel_time_mins + b_queue + b_visit +
+                        leg2_trans.travel_time_mins + leg2_queue + pandal.avg_visit_mins +
+                        leg2_ret.travel_time_mins
+                    )
+
+                    # Only insert bonus pandal if both bonus pandal AND planned pandal + safe return fit within curfew
+                    if time_with_bonus <= total_budget:
+                        elapsed_mins += (b_trans.travel_time_mins + b_queue + b_visit)
+                        total_travel_mins += b_trans.travel_time_mins
+                        total_queue_mins += b_queue
+                        total_dist_km += b_trans.distance_km
+                        total_transit_cost_min += b_trans.cost_min_inr
+                        total_transit_cost_max += b_trans.cost_max_inr
+
+                        visited_pandals.append(bonus_pandal)
+                        visited_ids.add(bonus_pandal.id)
+                        bonus_pandal_names.append(bonus_pandal.name)
+
+                        stops.append(ItineraryStop(
+                            stop_number=len(stops) + 1,
+                            pandal_id=bonus_pandal.id,
+                            name=f"✨ {bonus_pandal.name} (On-Route Discovery)",
+                            zone=bonus_pandal.zone,
+                            arrival_time_str=format_hour_to_time_str(b_arr),
+                            departure_time_str=format_hour_to_time_str(b_dep),
+                            queue_wait_mins=round(b_queue, 1),
+                            visit_mins=round(b_visit, 1),
+                            nearest_metro=bonus_pandal.nearest_metro,
+                            description=f"Direct on-route opportunity (~{detour_km:.2f} km detour): {bonus_pandal.description}",
+                            movement_mode=b_trans.mode,
+                            transition=b_trans,
+                            is_home_stop=False,
+                            is_bonus_stop=True,
+                            lat=bonus_pandal.lat,
+                            lon=bonus_pandal.lon
+                        ))
+
+                        current_lat = bonus_pandal.lat
+                        current_lon = bonus_pandal.lon
+                        current_location_name = bonus_pandal.name
+                        current_hour = b_dep
+
             # Move to Pandal
             transition = get_transition_details(
                 current_lat, current_lon, pandal.lat, pandal.lon,
@@ -397,6 +520,7 @@ class PujaHopperOptimizer:
                 movement_mode=transition.mode,
                 transition=transition,
                 is_home_stop=False,
+                is_bonus_stop=False,
                 lat=pandal.lat,
                 lon=pandal.lon
             ))
@@ -566,6 +690,7 @@ class PujaHopperOptimizer:
             "total_travel_mins": round(total_travel_mins, 1),
             "total_distance_km": round(total_dist_km, 1),
             "pandal_count": len(visited_pandals),
+            "bonus_pandals": bonus_pandal_names,
             "costing": costing,
             "gateway": gateway
         }
@@ -655,10 +780,13 @@ class PujaHopperOptimizer:
         notes = []
         costing = final_stats["costing"]
         gateway = final_stats["gateway"]
+        bonus_pandals = final_stats.get("bonus_pandals", [])
         notes.append(f"💰 Total Estimated Budget: ₹{costing.total_cost_min_inr} - ₹{costing.total_cost_max_inr} per person (Transit: ₹{costing.transit_cost_min_inr}-₹{costing.transit_cost_max_inr}, Food & Meals: ₹{costing.food_cost_min_inr}-₹{costing.food_cost_max_inr}).")
         notes.append(f"🚉 Entry Transit Gateway: {gateway.entry_gateway_name} ({gateway.entry_gateway_line}).")
         notes.append(f"🏡 Return Transit Gateway: {gateway.return_gateway_name}.")
         
+        if bonus_pandals:
+            notes.append(f"✨ On-Route Discovery Bonus: Added {len(bonus_pandals)} top-rated pandal(s) directly along your walking corridor ({', '.join(bonus_pandals)}) without causing any detour delay!")
         if len(prefs.meals) > 1:
             notes.append(f"🍽️ Multi-Meal Schedule: Successfully placed {len(prefs.meals)} culinary stops directly along your path.")
         if prefs.start_hour >= 23.0 or prefs.start_hour < 4.0:
@@ -692,5 +820,6 @@ class PujaHopperOptimizer:
             summary_notes=notes,
             planning_mode=prefs.planning_mode,
             selected_pandal_count=len(prefs.custom_pandal_ids) if prefs.planning_mode == "custom_selection" else 0,
-            unvisited_custom_pandals=unvisited_names
+            unvisited_custom_pandals=unvisited_names,
+            bonus_pandals_added=bonus_pandals
         )
