@@ -12,6 +12,16 @@ import streamlit as st
 import pandas as pd
 import pydeck as pdk
 from collections import Counter
+import importlib
+
+import data
+import optimizer
+import geocoder
+
+# Force reload helper modules to eliminate stale bytecode/sys.modules caching on Streamlit Cloud
+importlib.reload(data)
+importlib.reload(optimizer)
+importlib.reload(geocoder)
 
 from data import Pandal, SAMPLE_PANDALS, FOOD_CATALOG, ICONIC_RESTAURANTS, MAJOR_TRANSIT_HUBS
 from geocoder import geocode_location
