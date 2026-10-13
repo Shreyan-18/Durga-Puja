@@ -109,8 +109,37 @@ def main():
 
     res = optimizer.optimize_itinerary(pref)
     print_full_plan(
-        "BARUIPUR COMMUTER WITH ARSALAN BIRYANI (10:30 PM) + BALWANT SINGH DHABA CHAI (2:30 AM)",
+        "SCENARIO 1: AUTO-DISCOVER & RECOMMENDATION FOR BARUIPUR COMMUTER",
         res
+    )
+
+    # SCENARIO 2: USER-SPECIFIED CUSTOM BUCKET LIST (5 MUST-VISIT PANDALS)
+    custom_pids = ["chetla_agrani", "ekdalia", "tridhara", "suruchi_sangha", "barisha_club"]
+    pref_custom = UserPreference(
+        home_name=resolved_name,
+        home_lat=lat,
+        home_lon=lon,
+        start_hour=parse_time_str_to_float("17:00"),  # 5:00 PM
+        end_hour=parse_time_str_to_float("04:30"),    # 4:30 AM
+        preferred_zones=["South"],
+        tithi="Ashtami",
+        planning_mode="custom_selection",
+        custom_pandal_ids=custom_pids,
+        meals=[
+            MealSlot(
+                title="Dinner",
+                target_hour=parse_time_str_to_float("21:30"),
+                food_category="biryani",
+                specific_restaurant_id="auto_along_route",
+                duration_mins=40
+            )
+        ]
+    )
+
+    res_custom = optimizer.optimize_itinerary(pref_custom)
+    print_full_plan(
+        "SCENARIO 2: CUSTOM MUST-VISIT PANDAL BUCKET LIST (CHETLA, EKDALIA, TRIDHARA, SURUCHI, BARISHA)",
+        res_custom
     )
 
 if __name__ == "__main__":

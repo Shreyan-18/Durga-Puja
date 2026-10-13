@@ -13,7 +13,7 @@ import pandas as pd
 import pydeck as pdk
 from collections import Counter
 
-from data import SAMPLE_PANDALS, FOOD_CATALOG, ICONIC_RESTAURANTS, MAJOR_TRANSIT_HUBS
+from data import Pandal, SAMPLE_PANDALS, FOOD_CATALOG, ICONIC_RESTAURANTS, MAJOR_TRANSIT_HUBS
 from geocoder import geocode_location
 from optimizer import PujaHopperOptimizer, UserPreference, MealSlot, format_hour_to_time_str
 
@@ -202,23 +202,117 @@ for m_idx in range(num_meals):
             duration_mins=40
         ))
 
-# ----------------- HOPPING PREFERENCES -----------------
-st.sidebar.subheader("🎪 4. Pandal Preferences")
+# ----------------- HOPPING PREFERENCES & PLANNING MODE -----------------
+st.sidebar.subheader("🎪 4. Pandal Planning Mode")
+
+# Store custom user-added pandals in session state
+if "custom_user_pandals" not in st.session_state:
+    st.session_state.custom_user_pandals = []
+
+# Combined pandal pool (Master catalog + any user-created custom pandals)
+all_available_pandals = SAMPLE_PANDALS + st.session_state.custom_user_pandals
+
+planning_mode_choice = st.sidebar.radio(
+    "How would you like to plan?",
+    ["✨ Auto-Discover & Recommend", "🎯 Custom Selection (My Must-Visit Pandals)"],
+    index=0,
+    help="Auto-Discover recommends the best pandals based on zones and theme weights. Custom Selection lets you choose or add your exact must-visit pandals and calculates the globally optimal visiting sequence."
+)
+is_custom_mode = ("Custom" in planning_mode_choice)
+
 tithi = st.sidebar.selectbox(
     "Puja Tithi",
     ["Chaturthi", "Panchami", "Sasthi", "Saptami", "Ashtami", "Nabami", "Dashami"],
     index=4 # Ashtami
 )
 
-selected_zones = st.sidebar.multiselect(
-    "Target Pandal Zones",
-    options=["South", "North", "Central", "East_VIP", "East_SaltLake", "Howrah"],
-    default=["South"]
-)
+selected_pandal_ids = []
+selected_zones = []
 
-col_p1, col_p2 = st.sidebar.columns(2)
-theme_weight = col_p1.slider("Theme Art", 0.5, 2.0, 1.2, 0.1)
-trad_weight = col_p2.slider("Heritage", 0.5, 2.0, 1.0, 0.1)
+if is_custom_mode:
+    st.sidebar.markdown("#### 📌 Choose Your Must-Visit Pandals")
+    
+    # Preset quick-add circuits
+    preset_choice = st.sidebar.selectbox(
+        "⚡ Quick-Load Popular Circuits",
+        [
+            "Custom selection (Choose below)...",
+            "🌟 South Kolkata Mega Circuit (7 Top Pandals)",
+            "🏛️ North Kolkata Heritage Trail (6 Top Pandals)",
+            "🎨 Behala Powerhouse Circuit (5 Pandals)",
+            "🏰 Salt Lake & VIP Road Spectacles (4 Pandals)"
+        ]
+    )
+    
+    preset_map = {
+        "🌟 South Kolkata Mega Circuit (7 Top Pandals)": ["ekdalia", "singhi_park", "tridhara", "ballygunge_cultural", "maddox_square", "chetla_agrani", "suruchi_sangha"],
+        "🏛️ North Kolkata Heritage Trail (6 Top Pandals)": ["bagbazar", "sovabazar_rajbari", "kumartuli_park", "ahiritola", "kashi_bose_lane", "hatibagan_sarbojanin"],
+        "🎨 Behala Powerhouse Circuit (5 Pandals)": ["barisha_club", "behala_nutan_dal", "behala_club", "behala_friends_club", "behala_players_corner"],
+        "🏰 Salt Lake & VIP Road Spectacles (4 Pandals)": ["sreebhumi", "lake_town_adhibasi", "saltlake_fd_block", "saltlake_bj_block"]
+    }
+    
+    default_pids = preset_map.get(preset_choice, ["ekdalia", "tridhara", "maddox_square", "chetla_agrani", "suruchi_sangha"])
+    
+    pandal_options_dict = {
+        p.id: f"{p.name} [{p.zone}] • {p.nearest_metro}"
+        for p in all_available_pandals
+    }
+    
+    selected_pandal_ids = st.sidebar.multiselect(
+        "Select Pandals to Route (Search or Select)",
+        options=list(pandal_options_dict.keys()),
+        default=[pid for pid in default_pids if pid in pandal_options_dict],
+        format_func=lambda pid: pandal_options_dict[pid],
+        help="Select as many pandals as you like. The algorithm optimizes the visiting sequence to minimize travel and crowd wait time."
+    )
+    
+    st.sidebar.caption(f"📍 **{len(selected_pandal_ids)} pandals selected** for routing.")
+
+    # Expander to add a custom neighborhood pandal
+    with st.sidebar.expander("➕ Add a New / Neighborhood Pandal", expanded=False):
+        c_name = st.text_input("Pandal Name", placeholder="e.g. Jadavpur Sammilani, Para Club...")
+        c_zone = st.selectbox("Zone", ["South", "North", "Central", "East_VIP", "East_SaltLake", "Howrah"])
+        c_loc = st.text_input("Area / Landmark / PIN Code", placeholder="e.g. Jadavpur 8B, Santoshpur, 700032...")
+        
+        if st.button("➕ Add Pandal to Directory"):
+            if c_name and c_loc:
+                res_loc = geocode_location(c_loc)
+                if res_loc:
+                    new_id = f"custom_{len(st.session_state.custom_user_pandals) + 1}_{c_name.lower().replace(' ', '_')}"
+                    new_pandal = Pandal(
+                        id=new_id,
+                        name=c_name,
+                        zone=c_zone,
+                        lat=res_loc.lat,
+                        lon=res_loc.lon,
+                        base_rating=9.0,
+                        theme_type="Theme",
+                        avg_visit_mins=18,
+                        crowd_tier=2,
+                        nearest_metro=res_loc.display_name.split(",")[0],
+                        description=f"User-added neighborhood pandal located at {res_loc.display_name}.",
+                        key_street=c_loc
+                    )
+                    st.session_state.custom_user_pandals.append(new_pandal)
+                    st.success(f"Added {c_name}! It is now available in your selection list above.")
+                    st.rerun()
+                else:
+                    st.error("Could not find coordinates. Please try another landmark or PIN code.")
+            else:
+                st.warning("Please provide both Pandal Name and Area/Landmark.")
+
+    theme_weight = 1.0
+    trad_weight = 1.0
+else:
+    selected_zones = st.sidebar.multiselect(
+        "Target Pandal Zones",
+        options=["South", "North", "Central", "East_VIP", "East_SaltLake", "Howrah"],
+        default=["South"]
+    )
+    col_p1, col_p2 = st.sidebar.columns(2)
+    theme_weight = col_p1.slider("Theme Art", 0.5, 2.0, 1.2, 0.1)
+    trad_weight = col_p2.slider("Heritage", 0.5, 2.0, 1.0, 0.1)
+
 patience = st.sidebar.slider("Queue Patience", 0.5, 1.5, 1.0, 0.1)
 has_vip = st.sidebar.checkbox("VIP Passes", value=False)
 
@@ -263,13 +357,24 @@ prefs = UserPreference(
     has_vip_pass=has_vip,
     meals=configured_meals,
     max_budget_inr=max_budget_val,
-    max_meal_cost=max_meal_spend_val
+    max_meal_cost=max_meal_spend_val,
+    planning_mode="custom_selection" if is_custom_mode else "auto",
+    custom_pandal_ids=selected_pandal_ids if is_custom_mode else []
 )
 
-optimizer = PujaHopperOptimizer()
+optimizer = PujaHopperOptimizer(pandal_pool=all_available_pandals)
 result = optimizer.optimize_itinerary(prefs)
 c = result.costing
 gw = result.gateway
+
+# ----------------- CUSTOM PLANNING STATUS BANNER -----------------
+if is_custom_mode:
+    if len(selected_pandal_ids) == 0:
+        st.warning("⚠️ **No Pandals Selected:** Please select at least one must-visit pandal in the sidebar to generate your custom route.")
+    elif result.total_pandals_visited >= len(selected_pandal_ids):
+        st.success(f"🎯 **Custom Route Successfully Optimized!** All **{result.total_pandals_visited}** of your selected must-visit pandals have been sequenced in the globally optimal order to minimize travel distance, avoid traffic choke points, and beat crowd rush queues.")
+    else:
+        st.warning(f"⏱️ **Time Budget Notice:** Successfully scheduled **{result.total_pandals_visited}** of your **{len(selected_pandal_ids)}** chosen pandals. Due to queue times and travel, the remaining ({', '.join(result.unvisited_custom_pandals)}) could not fit before your target curfew ({result.end_time_str}). Consider extending your End Time to visit them all!")
 
 # ----------------- GATEWAY GUIDANCE BANNER -----------------
 st.subheader("🚉 Recommended Transit & Metro Gateways")
@@ -481,10 +586,16 @@ with tab_transitions:
         st.divider()
 
 with tab_pandals:
-    st.subheader(f"🏛️ Comprehensive Bengal Durga Puja Directory ({len(SAMPLE_PANDALS)} Pandals)")
+    st.subheader(f"🏛️ Comprehensive Bengal Durga Puja Directory ({len(all_available_pandals)} Pandals)")
     st.caption("Browse, search, and filter celebrated Sharad Samman winners, Bonedi Bari mansions, and community Pujas.")
-    zc = Counter(p.zone for p in SAMPLE_PANDALS)
-    st.markdown(f"🌐 **Coverage Across Bengal ({len(SAMPLE_PANDALS)} Total):** 🔴 **{zc.get('South', 0)}** South Kolkata | 🔵 **{zc.get('North', 0)}** North Kolkata | 🟡 **{zc.get('Central', 0)}** Central Kolkata | 🟢 **{zc.get('East_SaltLake', 0)}** Salt Lake & New Town | 🟣 **{zc.get('East_VIP', 0)}** VIP Rd & Dum Dum | 🟠 **{zc.get('Howrah', 0)}** Howrah & Hooghly")
+    
+    if is_custom_mode:
+        st.info("💡 **Custom Mode Active:** You can select pandals for your route in the sidebar or use the quick circuit presets!")
+    else:
+        st.info("💡 **Tip:** Want to route specific pandals? Switch to **'🎯 Custom Selection'** in the sidebar to build your own custom bucket list!")
+
+    zc = Counter(p.zone for p in all_available_pandals)
+    st.markdown(f"🌐 **Coverage Across Bengal ({len(all_available_pandals)} Total):** 🔴 **{zc.get('South', 0)}** South Kolkata | 🔵 **{zc.get('North', 0)}** North Kolkata | 🟡 **{zc.get('Central', 0)}** Central Kolkata | 🟢 **{zc.get('East_SaltLake', 0)}** Salt Lake & New Town | 🟣 **{zc.get('East_VIP', 0)}** VIP Rd & Dum Dum | 🟠 **{zc.get('Howrah', 0)}** Howrah & Hooghly")
 
     # Search & Filter Controls
     col_f1, col_f2, col_f3, col_f4 = st.columns([2.5, 1.5, 1.5, 1.5])
@@ -496,7 +607,7 @@ with tab_pandals:
 
     # Filtering Logic
     filtered_pandals = []
-    for p in SAMPLE_PANDALS:
+    for p in all_available_pandals:
         if search_q:
             match_str = f"{p.name} {p.zone} {p.theme_type} {p.nearest_metro} {p.key_street} {p.description}".lower()
             if search_q not in match_str:

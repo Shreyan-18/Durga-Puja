@@ -34,6 +34,10 @@ puja_hopper/
 
 ## ✨ Key Features
 
+- **🎯 Dual Planning Modes (Auto-Discover vs. Custom Bucket List)**:
+  - **✨ Auto-Discover & Recommend**: Intelligently recommends the highest-rated pandals across selected zones based on art themes, tradition, and crowd tolerance.
+  - **🎯 Custom Selection & Route Optimization**: Handpick your exact must-visit pandals (or add custom neighborhood pandals with live geocoding). The algorithm computes the globally optimal traveling sequence, avoiding traffic traps and minimizing queue times.
+
 - **🏛️ 164+ Bengal Pandals Across 6 Zones**:
   - **South Kolkata (47)**: Ekdalia, Singhi Park, Tridhara, Ballygunge Cultural, Maddox Square, Chetla Agrani, Suruchi Sangha, Mudiali, Naktala Udayan, Jodhpur Park, Baruipur Roy Chowdhury Bari, etc.
   - **Behala & Sakher Bazar**: Barisha Club, Barisha Sarbojanin, Behala Nutan Dal, Behala Club, Behala Friends Club, Behala Players Corner, Barisha Yubak Brinda, Behala Srishti, Behala Buroshibtala, Behala Debdaru Fatak, Parnasree Club, etc.

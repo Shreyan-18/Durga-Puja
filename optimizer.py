@@ -44,6 +44,8 @@ class UserPreference:
     meals: List[MealSlot] = field(default_factory=list)
     max_budget_inr: Optional[int] = None
     max_meal_cost: Optional[int] = None
+    planning_mode: str = "auto"
+    custom_pandal_ids: List[str] = field(default_factory=list)
 
     @property
     def total_budget_minutes(self) -> float:
@@ -113,6 +115,9 @@ class ItineraryResult:
     gateway: GatewayGuidance
     schedule: List[ItineraryStop]
     summary_notes: List[str]
+    planning_mode: str = "auto"
+    selected_pandal_count: int = 0
+    unvisited_custom_pandals: List[str] = field(default_factory=list)
 
 def format_hour_to_time_str(hour_float: float) -> str:
     normalized_hour = hour_float % 24.0
@@ -143,6 +148,12 @@ class PujaHopperOptimizer:
         self.pandal_pool = pandal_pool or SAMPLE_PANDALS
 
     def filter_candidates(self, prefs: UserPreference) -> List[Pandal]:
+        if prefs.planning_mode == "custom_selection" and prefs.custom_pandal_ids:
+            pandal_map = {p.id: p for p in self.pandal_pool}
+            selected = [pandal_map[pid] for pid in prefs.custom_pandal_ids if pid in pandal_map]
+            if selected:
+                return selected
+
         if not prefs.preferred_zones:
             return self.pandal_pool
         return [p for p in self.pandal_pool if p.zone in prefs.preferred_zones]
@@ -560,7 +571,7 @@ class PujaHopperOptimizer:
         }
         return stops, stats
 
-    def evaluate_route_objective(self, route: List[Pandal], prefs: UserPreference) -> float:
+    def evaluate_route_objective(self, route: List[Pandal], prefs: UserPreference, candidate_count: int = 0) -> float:
         stops, stats = self.simulate_itinerary(route, prefs)
         if stats["pandal_count"] == 0:
             return -9999.0
@@ -568,6 +579,14 @@ class PujaHopperOptimizer:
         pandal_stops = [s for s in stops if not s.is_home_stop and not s.is_food_stop]
         visited_ids = {s.pandal_id for s in pandal_stops}
         visited_pandals = [p for p in route if p.id in visited_ids]
+
+        if prefs.planning_mode == "custom_selection" and prefs.custom_pandal_ids:
+            total_target = candidate_count if candidate_count > 0 else len(prefs.custom_pandal_ids)
+            coverage_reward = len(visited_pandals) * 250.0
+            unvisited_penalty = (total_target - len(visited_pandals)) * 350.0
+            queue_penalty = stats["total_queue_mins"] * (0.40 / max(prefs.patience_factor, 0.2))
+            travel_penalty = stats["total_travel_mins"] * 0.45
+            return coverage_reward - unvisited_penalty - queue_penalty - travel_penalty
 
         total_utility = sum(self.calculate_stop_utility(p, prefs) * 10.0 for p in visited_pandals)
 
@@ -587,9 +606,10 @@ class PujaHopperOptimizer:
             dist = haversine_km(prefs.home_lat, prefs.home_lon, p.lat, p.lon)
             return (dist / max(p.base_rating, 1.0))
 
+        cand_count = len(candidates)
         initial_route = sorted(candidates, key=init_sort_key)
         best_route = copy.copy(initial_route)
-        best_score = self.evaluate_route_objective(best_route, prefs)
+        best_score = self.evaluate_route_objective(best_route, prefs, candidate_count=cand_count)
 
         current_route = copy.copy(best_route)
         current_score = best_score
@@ -614,7 +634,7 @@ class PujaHopperOptimizer:
                 random.shuffle(sub)
                 neighbor[idx1:idx1+3] = sub
 
-            neighbor_score = self.evaluate_route_objective(neighbor, prefs)
+            neighbor_score = self.evaluate_route_objective(neighbor, prefs, candidate_count=cand_count)
             delta = neighbor_score - current_score
 
             if delta > 0 or math.exp(delta / max(temperature, 1e-4)) > random.random():
@@ -644,6 +664,16 @@ class PujaHopperOptimizer:
         if prefs.start_hour >= 23.0 or prefs.start_hour < 4.0:
             notes.append("🌙 Midnight Hopping: Queues drop by ~60% after 2:30 AM; roads open up for faster connections.")
 
+        pandal_stops = [s for s in final_stops if not s.is_home_stop and not s.is_food_stop]
+        visited_ids = {s.pandal_id for s in pandal_stops}
+        unvisited_names = []
+        if prefs.planning_mode == "custom_selection" and prefs.custom_pandal_ids:
+            unvisited_names = [p.name for p in candidates if p.id not in visited_ids]
+            if len(unvisited_names) == 0:
+                notes.insert(0, f"🎯 Perfect Custom Route: Successfully planned the optimal sequence for all {len(candidates)} of your chosen pandals!")
+            else:
+                notes.insert(0, f"⏱️ Time Window Advisory: Fitted {len(visited_ids)} of your {len(candidates)} chosen pandals within the {prefs.total_budget_minutes/60:.1f}-hr window. Remaining: {', '.join(unvisited_names[:3])}{'...' if len(unvisited_names)>3 else ''}.")
+
         return ItineraryResult(
             home_name=prefs.home_name,
             start_time_str=start_time_str,
@@ -659,5 +689,8 @@ class PujaHopperOptimizer:
             costing=costing,
             gateway=gateway,
             schedule=final_stops,
-            summary_notes=notes
+            summary_notes=notes,
+            planning_mode=prefs.planning_mode,
+            selected_pandal_count=len(prefs.custom_pandal_ids) if prefs.planning_mode == "custom_selection" else 0,
+            unvisited_custom_pandals=unvisited_names
         )
