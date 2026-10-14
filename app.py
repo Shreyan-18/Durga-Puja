@@ -248,16 +248,24 @@ if is_custom_mode:
         [
             "Custom selection (Choose below)...",
             "🌟 South Kolkata Mega Circuit (7 Top Pandals)",
+            "🎨 Behala & Thakurpukur Powerhouse Circuit (8 Pandals)",
+            "🪔 Baruipur Town & Suburb Circuit (7 Top Pandals)",
             "🏛️ North Kolkata Heritage Trail (6 Top Pandals)",
-            "🎨 Behala Powerhouse Circuit (5 Pandals)",
+            "🏰 Kalyani, Kanchrapara & Naihati Mega Circuit (5 Pandals)",
+            "🎨 Garia, Jadavpur & Santoshpur Circuit (5 Pandals)",
+            "🌴 South 24 Parganas District Trail (4 Pandals)",
             "🏰 Salt Lake & VIP Road Spectacles (4 Pandals)"
         ]
     )
     
     preset_map = {
         "🌟 South Kolkata Mega Circuit (7 Top Pandals)": ["ekdalia", "singhi_park", "tridhara", "ballygunge_cultural", "maddox_square", "chetla_agrani", "suruchi_sangha"],
+        "🎨 Behala & Thakurpukur Powerhouse Circuit (8 Pandals)": ["barisha_club", "behala_nutan_dal", "behala_club", "behala_friends_club", "behala_players_corner", "thakurpukur_sb_park", "behala_youngmens_association", "behala_siksha_ayatan"],
+        "🪔 Baruipur Town & Suburb Circuit (7 Top Pandals)": ["baruipur_sasan_balak_sangha", "baruipur_sahapara_sarbojanin", "baruipur_roy_chowdhury", "baruipur_ajeya_sangha", "baruipur_bhaibhai_sangha", "baruipur_padmapukur", "baruipur_dakshin_ray_pally"],
         "🏛️ North Kolkata Heritage Trail (6 Top Pandals)": ["bagbazar", "sovabazar_rajbari", "kumartuli_park", "ahiritola", "kashi_bose_lane", "hatibagan_sarbojanin"],
-        "🎨 Behala Powerhouse Circuit (5 Pandals)": ["barisha_club", "behala_nutan_dal", "behala_club", "behala_friends_club", "behala_players_corner"],
+        "🏰 Kalyani, Kanchrapara & Naihati Mega Circuit (5 Pandals)": ["kalyani_iti_luminous", "kalyani_rathtala_sarbojanin", "kanchrapara_sixteen_pally", "kanchrapara_viswanath_smriti", "naihati_baro_maa_durgotsav"],
+        "🎨 Garia, Jadavpur & Santoshpur Circuit (5 Pandals)": ["garia_mitali_sangha", "santoshpur_lake_pally", "jadavpur_sammilani", "garia_kanungo_park", "santoshpur_tricon_park"],
+        "🌴 South 24 Parganas District Trail (4 Pandals)": ["diamond_harbour_sarbojanin", "canning_sonjoy_polli", "joynagar_majilpur_sarbojanin", "lakshmikantapur_sarbojanin"],
         "🏰 Salt Lake & VIP Road Spectacles (4 Pandals)": ["sreebhumi", "lake_town_adhibasi", "saltlake_fd_block", "saltlake_bj_block"]
     }
     
