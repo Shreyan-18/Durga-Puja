@@ -14,11 +14,15 @@ import pydeck as pdk
 from collections import Counter
 import importlib
 
+import pandals_data
+import restaurants_data
 import data
 import optimizer
 import geocoder
 
 # Force reload helper modules to eliminate stale bytecode/sys.modules caching on Streamlit Cloud
+importlib.reload(pandals_data)
+importlib.reload(restaurants_data)
 importlib.reload(data)
 importlib.reload(optimizer)
 importlib.reload(geocoder)
